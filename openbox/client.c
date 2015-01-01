@@ -4632,10 +4632,10 @@ ObClient* client_at_point(gint x, gint y)
                 /* ignore all animating windows */
                 !frame_iconify_animating(c->frame) &&
                 RECT_CONTAINS(c->frame->area, x, y))
-                {
-                    ret = c;
-                    break;
-                }
+            {
+                ret = c;
+                break;
+            }
         }
     }
     return ret;
