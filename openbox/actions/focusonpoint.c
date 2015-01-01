@@ -3,12 +3,14 @@
 #include "openbox/client.h"
 #include "openbox/focus.h"
 #include "openbox/screen.h"
+#include "openbox/window.h"
 
 typedef struct {
     gint x;
     gint x_denom;
     gint y;
     gint y_denom;
+    gboolean raise;
 } Options;
 
 static gpointer setup_func(xmlNodePtr node);
@@ -31,6 +33,7 @@ static gpointer setup_func(xmlNodePtr node)
     o->x_denom = 0;
     o->y = 0;
     o->y_denom = 0;
+    o->raise = TRUE;
 
     if ((n = obt_xml_find_node(node, "x"))) {
       s = obt_xml_node_string(n);
@@ -41,6 +44,9 @@ static gpointer setup_func(xmlNodePtr node)
       s = obt_xml_node_string(n);
       config_parse_relative_number(s, &o->y, &o->y_denom);
       g_free(s);
+    }
+    if ((n = obt_xml_find_node(node, "raise"))) {
+      o->raise = obt_xml_node_bool(n);
     }
 	
     return o;
@@ -79,6 +85,10 @@ static gboolean run_func(ObActionsData *data, gpointer options)
   } else {
     // TODO: Do I need the actions_client_move wrapping the focus?
     client_activate(client, TRUE, FALSE, FALSE, FALSE, TRUE);
+    // If raise is true, raise the window to the front of the stack
+    if (o->raise) {
+      stacking_raise(CLIENT_AS_WINDOW(client));
+    }
   }
   return FALSE;
 }
