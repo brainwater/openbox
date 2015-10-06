@@ -4,6 +4,7 @@
 #include "openbox/focus.h"
 #include "openbox/screen.h"
 #include "openbox/window.h"
+#include "openbox/config.h"
 
 typedef struct {
     gint x;
