@@ -1,3 +1,4 @@
+
 /* -*- indent-tabs-mode: nil; tab-width: 4; c-basic-offset: 4; -*-
 
    if.c for the Openbox window manager
@@ -69,8 +70,10 @@ typedef struct {
     gboolean omnipresent_off;
     gboolean desktop_current;
     gboolean desktop_other;
-    gboolean containsx_check;
-    gboolean containsy_check;
+    gboolean containsx_isglobal;
+    gboolean containsx_ismonitor;
+    gboolean containsy_isglobal;
+    gboolean containsy_ismonitor;
     guint    desktop_number;
     guint    screendesktop_number;
     guint    client_monitor;
@@ -183,8 +186,6 @@ static void setup_query(Options* o, xmlNodePtr node, QueryTarget target) {
     Query *q = g_slice_new0(Query);
     g_array_append_val(o->queries, q);
 
-    gchar *s;
-
     q->target = target;
 
     set_bool(node, "shaded", &q->shaded_on, &q->shaded_off);
@@ -199,6 +200,7 @@ static void setup_query(Options* o, xmlNodePtr node, QueryTarget target) {
 
     xmlNodePtr n;
     if ((n = obt_xml_find_node(node, "desktop"))) {
+        gchar *s;
         if ((s = obt_xml_node_string(n))) {
             if (!g_ascii_strcasecmp(s, "current"))
                 q->desktop_current = TRUE;
@@ -231,16 +233,30 @@ static void setup_query(Options* o, xmlNodePtr node, QueryTarget target) {
         q->client_monitor = obt_xml_node_int(n);
     }
     if ((n = obt_xml_find_node(node, "containsxpoint"))) {
-        s = obt_xml_node_string(n);
-        config_parse_relative_number(s, &q->xpoint, &q->xpoint_denom);
-        q->containsx_check = TRUE;
-        g_free(s);
+        gchar *s;
+        if ((s = obt_xml_node_string(n))) {
+            gboolean isglobal;
+            if (!obt_xml_attr_bool(n, "global", &isglobal) ||
+                !isglobal)
+                q->containsx_ismonitor = TRUE;
+            else
+                q->containsx_isglobal = TRUE;
+            config_parse_relative_number(s, &q->xpoint, &q->xpoint_denom);
+            g_free(s);
+        }
     }
     if ((n = obt_xml_find_node(node, "containsypoint"))) {
-        s = obt_xml_node_string(n);
-        config_parse_relative_number(s, &q->ypoint, &q->ypoint_denom);
-        q->containsy_check = TRUE;
-        g_free(s);
+        gchar *s;
+        if ((s = obt_xml_node_string(n))) {
+            gboolean isglobal;
+            if (!obt_xml_attr_bool(n, "global", &isglobal) ||
+                !isglobal)
+                q->containsy_ismonitor = TRUE;
+            else
+                q->containsy_isglobal = TRUE;
+            config_parse_relative_number(s, &q->ypoint, &q->ypoint_denom);
+            g_free(s);
+        }
     }
 }
 
@@ -437,24 +453,43 @@ static gboolean run_func_if(ObActionsData *data, gpointer options)
         if (q->client_monitor)
             is_true &= client_monitor(query_target) == q->client_monitor - 1;
 
-        // Since 0,0 is a valid pixel location we need to check separate boolean
-        if (q->containsx_check) {
+        if (q->containsx_ismonitor) {
             gint xpoint = q->xpoint;
-            // Since the denominator cannot reasonably be zero, this is a valid check
+            // Use the active monitor area only
+            const Rect *area = screen_physical_area_active();
+            // Treat xpoint as absolute location if denominator is zero
             if (q->xpoint_denom) {
-                const Rect *containing_area = screen_physical_area_monitor(client_monitor(query_target));
-                xpoint = (q->xpoint * containing_area->width) / q->xpoint_denom;
+                // Use only the active monitor
+                xpoint = (q->xpoint * area->width) / q->xpoint_denom;
+            }
+            xpoint = xpoint + RECT_LEFT(*area);
+            is_true &= xpoint >= RECT_LEFT(query_target->frame->area);
+            is_true &= xpoint <= RECT_RIGHT(query_target->frame->area);
+        }
+        if (q->containsx_isglobal) {
+            gint xpoint = q->xpoint;
+            if (q->xpoint_denom) {
+                const Rect *area = screen_physical_area_all_monitors();
+                xpoint = (q->xpoint * area->width) / q->xpoint_denom;
             }
             is_true &= xpoint >= RECT_LEFT(query_target->frame->area);
             is_true &= xpoint <= RECT_RIGHT(query_target->frame->area);
         }
-        // Since 0,0 is a valid pixel location we need to check separate boolean
-        if (q->containsy_check) {
+        if (q->containsy_ismonitor) {
             gint ypoint = q->ypoint;
-            // Since the denominator cannot reasonably be zero, this is a valid check
+            const Rect *area = screen_physical_area_active();
             if (q->ypoint_denom) {
-                const Rect *containing_area = screen_physical_area_monitor(client_monitor(query_target));
-                ypoint = (q->ypoint * containing_area->height) / q->ypoint_denom;
+                ypoint = (q->ypoint * area->height) / q->ypoint_denom;
+            }
+            ypoint = ypoint + RECT_TOP(*area);
+            is_true &= ypoint >= RECT_TOP(query_target->frame->area);
+            is_true &= ypoint <= RECT_BOTTOM(query_target->frame->area);
+        }
+        if (q->containsy_isglobal) {
+            gint ypoint = q->ypoint;
+            if (q->ypoint_denom) {
+                const Rect *area = screen_physical_area_all_monitors();
+                ypoint = (q->ypoint * area->height) / q->ypoint_denom;
             }
             is_true &= ypoint >= RECT_TOP(query_target->frame->area);
             is_true &= ypoint <= RECT_BOTTOM(query_target->frame->area);
